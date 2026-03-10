@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>My Buy Requests</title>
+</head>
+<body style="background:#151320;color:white;font-family:sans-serif;padding:20px">
+
+<h2>Buy Requests</h2>
+
+<div id="requests"></div>
+
+<script>
+
+const API_BASE = "http://127.0.0.1:3000";
+const user = JSON.parse(localStorage.getItem("car_rental_user"));
+
+if(!user){
+  alert("Login required");
+  window.location.href="../login/login.html";
+}
+
+async function fetchRequests(){
+
+  const res = await fetch(
+    `${API_BASE}/my-buy-requests/${user.email}`
+  );
+
+  const data = await res.json();
+
+  const container = document.getElementById("requests");
+
+  if(!data.requests.length){
+    container.innerHTML = "No buy requests yet ❌";
+    return;
+  }
+
+  data.requests.forEach(req => {
+
+    container.innerHTML += `
+      <div style="border:1px solid #444;padding:10px;margin:10px 0;">
+        <p><b>Car ID:</b> ${req.car_id}</p>
+        <p><b>Buyer:</b> ${req.buyer_email}</p>
+        <p><b>Offer:</b> ₹${req.offered_price}</p>
+        <p><b>Status:</b> ${req.status}</p>
+
+        <button onclick="updateStatus(${req.id}, 'Accepted')">
+          Accept
+        </button>
+
+        <button onclick="updateStatus(${req.id}, 'Rejected')">
+          Reject
+        </button>
+      </div>
+    `;
+  });
+}
+
+async function updateStatus(id, status){
+
+  await fetch(`${API_BASE}/update-buy-request`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({
+      request_id: id,
+      status: status
+    })
+  });
+
+  alert("Updated ✅");
+  location.reload();
+}
+
+fetchRequests();
+
+</script>
+
+</body>
+</html>

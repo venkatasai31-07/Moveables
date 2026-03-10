@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
-import sqlite3
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 import random
@@ -18,10 +19,13 @@ CORS(app)
 
 bcrypt = Bcrypt(app)
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_NAME = os.path.join(BASE_DIR, "login.db")
 
-print("DATABASE PATH:", DB_NAME)
+DATABASE_URL = "postgresql://postgres.pxnangovncbvfbjywnbv:omSriganesha06@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres"
+
+engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+SessionLocal = sessionmaker(bind=engine)
+
+
 
 # 🔥 CHANGE THIS (KEEP SECRET)
 ADMIN_SECRET = "supersecret123"
@@ -31,158 +35,17 @@ EMAIL_PASS = "eiigbdbsyfawqzbr"
 # -----------------------------
 # DATABASE CONNECTION
 # -----------------------------
-def get_db():
-    conn = sqlite3.connect(DB_NAME)
-    conn.row_factory = sqlite3.Row
-    return conn
+
 
 
 # -----------------------------
 # CREATE TABLES
 # -----------------------------
-def create_tables():
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # SIGNUP TABLE
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS signup(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        first_name TEXT,
-        last_name TEXT,
-        email TEXT UNIQUE
-    )
-    """)
-
-    # LOGIN TABLE
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS login(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        password TEXT
-    )
-    """)
-
-    # RESET PASSWORD TABLE
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS resetpassword(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT,
-        otp TEXT,
-        new_password TEXT,
-        reset_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
-    # ✅ ADMIN TABLE (MOVE HERE)
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS admintable(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        email TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    """)
-
-    cursor.execute("""
-CREATE TABLE IF NOT EXISTS cars(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_email TEXT NOT NULL,
-
-    listing_type TEXT,
-    
-    company TEXT,
-    model TEXT,
-    reg_number TEXT,
-    year TEXT,
-    fuel TEXT,
-    transmission TEXT,
-    seats TEXT,
-    km TEXT,
-
-    driver_name TEXT,
-    driver_mobile TEXT,
-
-    location TEXT,
-    price_month INTEGER,
-    deposit INTEGER,
-    notes TEXT,
-
-    images TEXT,
-
-    status TEXT DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-    
-
-    cursor.execute("""
-CREATE TABLE IF NOT EXISTS selling(
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    owner_email TEXT NOT NULL,
-
-    company TEXT,
-    model TEXT,
-    reg_number TEXT UNIQUE,
-    year TEXT,
-    fuel TEXT,
-    transmission TEXT,
-    km TEXT,
-    owner_type TEXT,
-
-    location TEXT,
-    selling_price INTEGER,
-    description TEXT,
-
-    images TEXT,
-
-    status TEXT DEFAULT 'Pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-    cursor.execute("""
-CREATE TABLE IF NOT EXISTS bookings (
-
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    car_id INTEGER,
-    car_name TEXT,
-    owner_email TEXT,
-
-    customer_email TEXT,
-    customer_name TEXT,
-    customer_mobile TEXT,
-    nominee TEXT,
-
-    rental_type TEXT,
-
-    pickup_location TEXT,
-    drop_location TEXT,
-
-    pickup_datetime TEXT,
-    drop_datetime TEXT,
-
-    driver_name TEXT,
-    driver_mobile TEXT,
-    passenger_count INTEGER,
-
-    total_cost INTEGER,
-
-    booking_status TEXT DEFAULT 'Confirmed',
-
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-)
-""")
-
-
-    conn.commit()
-    conn.close()
-
-create_tables()
+try:
+    with engine.connect() as conn:
+        print("✅ Connected to Supabase successfully!")
+except Exception as e:
+    print("❌ Connection failed:", e)
 
 @app.route("/")
 def home():
@@ -326,10 +189,7 @@ def signup():
     data = request.get_json(silent=True)
 
     if not data:
-        return jsonify({
-            "success": False,
-            "message": "Invalid request ❌"
-        }), 400
+        return jsonify({"success": False, "message": "Invalid request ❌"}), 400
 
     first = data.get("first_name")
     last = data.get("last_name")
@@ -337,75 +197,49 @@ def signup():
     password = data.get("password")
 
     if not all([first, last, email, password]):
-        return jsonify({
-            "success": False,
-            "message": "All fields required ❌"
-        }), 400
+        return jsonify({"success": False, "message": "All fields required ❌"}), 400
 
     email = email.lower().strip()
 
-    # 🔐 Hash password
-    hashed_pw = bcrypt.generate_password_hash(
-        password
-    ).decode("utf-8")
+    hashed_pw = bcrypt.generate_password_hash(password).decode("utf-8")
 
-    # 📅 Account Created Date
-    created_at = datetime.now().strftime(
-        "%d %b %Y"
-    )
-
-    # 🆔 Auto Generate Account ID
-    account_id = "CRP-" + \
-        str(uuid.uuid4())[:8].upper()
-
-    conn = get_db()
-    cursor = conn.cursor()
+    created_at = datetime.now().strftime("%d %b %Y")
+    account_id = "CRP-" + str(uuid.uuid4())[:8].upper()
 
     try:
+        with engine.begin() as conn:
 
-        # 👉 Insert into signup table
-        cursor.execute("""
-            INSERT INTO signup
-            (first_name, last_name, email,
-             account_id, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            first,
-            last,
-            email,
-            account_id,
-            created_at
-        ))
+            conn.execute(text("""
+                INSERT INTO signup
+                (first_name, last_name, email, account_id, created_at)
+                VALUES (:first, :last, :email, :account_id, :created_at)
+            """), {
+                "first": first,
+                "last": last,
+                "email": email,
+                "account_id": account_id,
+                "created_at": created_at
+            })
 
-        # 👉 Insert into login table
-        cursor.execute("""
-            INSERT INTO login
-            (email, password)
-            VALUES (?, ?)
-        """, (
-            email,
-            hashed_pw
-        ))
-
-        conn.commit()
+            conn.execute(text("""
+                INSERT INTO login (email, password)
+                VALUES (:email, :password)
+            """), {
+                "email": email,
+                "password": hashed_pw
+            })
 
         return jsonify({
             "success": True,
-            "message":
-            "Signup successful ✅ Please login"
+            "message": "Signup successful ✅ Please login"
         })
 
-    except sqlite3.IntegrityError:
-
+    except Exception as e:
+        print("Signup Error:", e)
         return jsonify({
             "success": False,
-            "message":
-            "Email already exists ❌"
+            "message": "Email already exists ❌"
         })
-
-    finally:
-        conn.close()
-
 
 # -----------------------------
 # 🔥 SINGLE LOGIN (ADMIN + USER)
@@ -426,50 +260,48 @@ def login():
 
     email = email.lower().strip()
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
 
-    # ✅ CHECK ADMIN FIRST
-    cursor.execute("SELECT * FROM admintable WHERE email=?", (email,))
-    admin = cursor.fetchone()
+        # Check admin
+        result = conn.execute(
+            text("SELECT * FROM admintable WHERE email=:email"),
+            {"email": email}
+        )
+        admin = result.mappings().first()
 
-    if admin:
+        if admin:
+            if not bcrypt.check_password_hash(admin["password"], password):
+                return jsonify({"success": False, "message": "Incorrect password ❌"}), 401
 
-        if not bcrypt.check_password_hash(admin["password"], password):
-            conn.close()
+            return jsonify({
+                "success": True,
+                "message": "Admin login successful ✅",
+                "role": "admin",
+                "user": {
+                    "name": admin["name"],
+                    "email": admin["email"]
+                }
+            })
+
+        # Check user
+        result = conn.execute(
+            text("SELECT * FROM login WHERE email=:email"),
+            {"email": email}
+        )
+        user = result.mappings().first()
+
+        if not user:
+            return jsonify({"success": False, "message": "User not found ❌"}), 404
+
+        if not bcrypt.check_password_hash(user["password"], password):
             return jsonify({"success": False, "message": "Incorrect password ❌"}), 401
-
-        conn.close()
 
         return jsonify({
             "success": True,
-            "message": "Admin login successful ✅",
-            "role": "admin",
-            "user": {
-                "name": admin["name"],
-                "email": admin["email"]
-            }
+            "message": "Login successful ✅",
+            "role": "user",
+            "user": {"email": email}
         })
-
-    # ✅ CHECK USER
-    cursor.execute("SELECT * FROM login WHERE email=?", (email,))
-    user = cursor.fetchone()
-    conn.close()
-
-    if not user:
-        return jsonify({"success": False, "message": "User not found ❌"}), 404
-
-    if not bcrypt.check_password_hash(user["password"], password):
-        return jsonify({"success": False, "message": "Incorrect password ❌"}), 401
-
-    return jsonify({
-    "success": True,
-    "message": "Login successful ✅",
-    "role": "user",
-    "user": {
-        "email": email
-    }
-})
 
 
 # -----------------------------
@@ -481,12 +313,12 @@ def forgot_password():
     data = request.get_json()
     email = data.get("email")
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # check from signup
-    cursor.execute("SELECT * FROM signup WHERE email=?", (email,))
-    user = cursor.fetchone()
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("SELECT * FROM signup WHERE email=:email"),
+            {"email": email}
+        )
+        user = result.fetchone()
 
     if not user:
         return jsonify({
@@ -506,8 +338,6 @@ def forgot_password():
         "success": True,
         "message": "OTP sent to email ✅"
     })
-
-
 # -----------------------------
 # RESET PASSWORD
 # -----------------------------
@@ -521,7 +351,6 @@ def reset_password():
     new_password = data.get("new_password")
 
     if otp_store.get(email) != otp:
-
         return jsonify({
             "success": False,
             "message": "Invalid OTP ❌"
@@ -529,24 +358,25 @@ def reset_password():
 
     hashed_pw = bcrypt.generate_password_hash(new_password).decode('utf-8')
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
 
-    # update login table
-    cursor.execute("""
-    UPDATE login
-    SET password=?
-    WHERE email=?
-    """, (hashed_pw, email))
+        conn.execute(text("""
+            UPDATE login
+            SET password=:password
+            WHERE email=:email
+        """), {
+            "password": hashed_pw,
+            "email": email
+        })
 
-    # store history
-    cursor.execute("""
-    INSERT INTO resetpassword(email,otp,new_password)
-    VALUES(?,?,?)
-    """, (email, otp, hashed_pw))
-
-    conn.commit()
-    conn.close()
+        conn.execute(text("""
+            INSERT INTO resetpassword(email, otp, new_password)
+            VALUES(:email, :otp, :new_password)
+        """), {
+            "email": email,
+            "otp": otp,
+            "new_password": hashed_pw
+        })
 
     otp_store.pop(email, None)
 
@@ -554,7 +384,6 @@ def reset_password():
         "success": True,
         "message": "Password reset successful ✅ Please login"
     })
-
 # -----------------------------
 # 🔥 CREATE ADMIN (SECURED)
 # -----------------------------
@@ -578,24 +407,28 @@ def create_admin():
 
     hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
 
-    cursor.execute("SELECT * FROM admintable WHERE email=?", (email,))
-    if cursor.fetchone():
-        conn.close()
-        return jsonify({
-            "success": False,
-            "message": "Admin already exists ❌"
+        # Check if already exists
+        result = conn.execute(
+            text("SELECT id FROM admintable WHERE email=:email"),
+            {"email": email}
+        )
+
+        if result.fetchone():
+            return jsonify({
+                "success": False,
+                "message": "Admin already exists ❌"
+            })
+
+        conn.execute(text("""
+            INSERT INTO admintable(name, email, password)
+            VALUES(:name, :email, :password)
+        """), {
+            "name": name,
+            "email": email,
+            "password": hashed_pw
         })
-
-    cursor.execute(
-        "INSERT INTO admintable(name,email,password) VALUES(?,?,?)",
-        (name, email, hashed_pw)
-    )
-
-    conn.commit()
-    conn.close()
 
     return jsonify({
         "success": True,
@@ -614,9 +447,6 @@ def add_car():
             "message": "Invalid request data ❌"
         }), 400
 
-    print("DATA RECEIVED:", data)
-
-    # ✅ Normalize important fields
     owner_email = data.get("owner_email", "").lower().strip()
     listing_type = data.get("listing_type", "").strip().title()
 
@@ -624,81 +454,89 @@ def add_car():
     model = data.get("model")
     reg_number = data.get("reg_number", "").upper().strip()
 
-    # 🔥 Validate Required Fields
     if not owner_email or not listing_type or not company or not model or not reg_number:
         return jsonify({
             "success": False,
             "message": "Missing required fields ❌"
         }), 400
 
-    conn = get_db()
-    cursor = conn.cursor()
-
     try:
+        with engine.begin() as conn:
 
-        # ✅ Prevent duplicate car registration
-        cursor.execute(
-            "SELECT id FROM cars WHERE reg_number=?",
-            (reg_number,)
-        )
+            # 🔥 Prevent duplicate registration
+            result = conn.execute(
+                text("SELECT id FROM cars WHERE reg_number=:reg"),
+                {"reg": reg_number}
+            )
 
-        if cursor.fetchone():
-            return jsonify({
-                "success": False,
-                "message": "Car already registered ❌"
-            }), 400
+            if result.fetchone():
+                return jsonify({
+                    "success": False,
+                    "message": "Car already registered ❌"
+                }), 400
 
+            # 🔥 Insert car and return ID
+            result = conn.execute(text("""
+                INSERT INTO cars(
+                    owner_email,
+                    listing_type,
+                    company,
+                    model,
+                    reg_number,
+                    year,
+                    fuel,
+                    transmission,
+                    seats,
+                    km,
+                    driver_name,
+                    driver_mobile,
+                    location,
+                    price_month,
+                    deposit,
+                    notes,
+                    images
+                )
+                VALUES(
+                    :owner_email,
+                    :listing_type,
+                    :company,
+                    :model,
+                    :reg_number,
+                    :year,
+                    :fuel,
+                    :transmission,
+                    :seats,
+                    :km,
+                    :driver_name,
+                    :driver_mobile,
+                    :location,
+                    :price_month,
+                    :deposit,
+                    :notes,
+                    :images
+                )
+                RETURNING id
+            """), {
+                "owner_email": owner_email,
+                "listing_type": listing_type,
+                "company": company,
+                "model": model,
+                "reg_number": reg_number,
+                "year": data.get("year"),
+                "fuel": data.get("fuel"),
+                "transmission": data.get("transmission"),
+                "seats": data.get("seats"),
+                "km": data.get("km"),
+                "driver_name": data.get("driver_name"),
+                "driver_mobile": data.get("driver_mobile"),
+                "location": data.get("location"),
+                "price_month": data.get("price_month") or 0,
+                "deposit": data.get("deposit") or 0,
+                "notes": data.get("notes"),
+                "images": json.dumps(data.get("images", []))
+            })
 
-        cursor.execute("""
-        INSERT INTO cars(
-            owner_email,
-            listing_type,
-            company,
-            model,
-            reg_number,
-            year,
-            fuel,
-            transmission,
-            seats,
-            km,
-            driver_name,
-            driver_mobile,
-            location,
-            price_month,
-            deposit,
-            notes,
-            images
-        )
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,(
-            owner_email,
-            listing_type,
-            company,
-            model,
-            reg_number,
-            data.get("year"),
-            data.get("fuel"),
-            data.get("transmission"),
-            data.get("seats"),
-            data.get("km"),
-            data.get("driver_name"),
-            data.get("driver_mobile"),
-            data.get("location"),
-            data.get("price_month") or 0,
-            data.get("deposit") or 0,
-            data.get("notes"),
-            json.dumps(data.get("images", []))
-        ))
-
-        conn.commit()
-
-        inserted_id = cursor.lastrowid
-
-        print("INSERT SUCCESS ✅")
-        print("Inserted Car ID:", inserted_id)
-
-        cursor.execute("SELECT COUNT(*) FROM cars")
-        print("TOTAL CARS:", cursor.fetchone()[0])
+            inserted_id = result.fetchone()[0]
 
         return jsonify({
             "success": True,
@@ -707,52 +545,51 @@ def add_car():
         })
 
     except Exception as e:
-
-        print("🚨 SQLITE ERROR:", str(e))
-
+        print("ADD CAR ERROR:", e)
         return jsonify({
             "success": False,
             "message": "Database error ❌"
         }), 500
 
-    finally:
-        conn.close()
-
 
 @app.route("/approved-cars/<email>/<listing_type>")
 def approved_cars(email, listing_type):
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM cars
+            WHERE status='Approved'
+            AND LOWER(owner_email) != LOWER(:email)
+            AND listing_type=:listing_type
+        """), {
+            "email": email,
+            "listing_type": listing_type
+        })
 
-    cursor.execute("""
-        SELECT * FROM cars
-        WHERE status='Approved'
-        AND LOWER(owner_email) != LOWER(?)
-        AND listing_type=?
-    """,(email, listing_type))
+        cars = [dict(row) for row in result.mappings().all()]
 
-    cars = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return jsonify({"success":True,"cars":cars})
-
-
-
+    return jsonify({
+        "success": True,
+        "cars": cars
+    })
 
 @app.route("/admin/pending-cars")
 def pending_cars():
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM cars
+            WHERE status='Pending'
+        """))
 
-    cursor.execute("SELECT * FROM cars WHERE status='Pending'")
-    cars = [dict(row) for row in cursor.fetchall()]
+        cars = [dict(row) for row in result.mappings().all()]
 
-    conn.close()
-
-    return jsonify({"success":True,"cars":cars})
-
+    return jsonify({
+        "success": True,
+        "cars": cars
+    })
 
 @app.route("/admin/update-car-status", methods=["POST"])
 def update_status():
@@ -760,41 +597,38 @@ def update_status():
     data = request.get_json()
 
     car_id = data.get("car_id")
-    status = data.get("status").capitalize()  # Approved / Rejected
+    status = data.get("status").capitalize()
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE cars
+            SET status=:status
+            WHERE id=:car_id
+        """), {
+            "status": status,
+            "car_id": car_id
+        })
 
-    cursor.execute("""
-    UPDATE cars
-    SET status=?
-    WHERE id=?
-    """,(status, car_id))
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"success":True})
+    return jsonify({"success": True})
 
 @app.route("/my-car-status/<email>")
 def my_car_status(email):
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM cars
+            WHERE owner_email=:email
+            ORDER BY created_at DESC
+        """), {
+            "email": email
+        })
 
-    cursor.execute("""
-    SELECT * FROM cars
-    WHERE owner_email=?
-    ORDER BY created_at DESC
-    """,(email,))
-
-    cars = [dict(row) for row in cursor.fetchall()]
-
-    conn.close()
+        cars = [dict(row) for row in result.mappings().all()]
 
     return jsonify({
-        "success":True,
-        "cars":cars
+        "success": True,
+        "cars": cars
     })
 
 
@@ -807,225 +641,172 @@ def book_car():
         return jsonify({
             "success": False,
             "message": "Invalid request ❌"
-        }),400
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-    UPDATE bookings
-    SET booking_status='Ongoing'
-    WHERE pickup_datetime <= datetime('now')
-    AND drop_datetime > datetime('now')
-    AND booking_status='Confirmed'
-""")
-
-    cursor.execute("""
-    UPDATE bookings
-    SET booking_status='Completed'
-    WHERE drop_datetime <= datetime('now')
-    AND booking_status IN ('Confirmed','Ongoing')
-""")
-
-    conn.commit()
-
+        }), 400
 
     try:
+        with engine.begin() as conn:
 
-        customer_email = data.get("customer_email")
-        if not customer_email:
+            # 🔥 Auto-update booking statuses
+            conn.execute(text("""
+                UPDATE bookings
+                SET booking_status='Ongoing'
+                WHERE pickup_datetime <= CURRENT_TIMESTAMP
+                AND drop_datetime > CURRENT_TIMESTAMP
+                AND booking_status='Confirmed'
+            """))
 
-            return jsonify({
-                "success": False,
-                "message": "Customer email missing ❌"
-    }),400
-        customer_email = customer_email.lower().strip()
-        car_id = data.get("car_id")
-        rental_type = data.get("rental_type")
+            conn.execute(text("""
+                UPDATE bookings
+                SET booking_status='Completed'
+                WHERE drop_datetime <= CURRENT_TIMESTAMP
+                AND booking_status IN ('Confirmed','Ongoing')
+            """))
 
-        # ✅ Validate required fields
-        if not car_id or not customer_email:
-            return jsonify({
-                "success": False,
-                "message": "Missing required fields ❌"
-            }),400
+            customer_email = data.get("customer_email")
+            if not customer_email:
+                return jsonify({
+                    "success": False,
+                    "message": "Customer email missing ❌"
+                }), 400
 
+            customer_email = customer_email.lower().strip()
+            car_id = data.get("car_id")
+            rental_type = data.get("rental_type")
 
-        # ✅ Validate rental type
-        if rental_type not in ["Rental Only", "With Driver"]:
-            return jsonify({
-                "success":False,
-                "message":"Invalid rental type ❌"
-            }),400
+            if not car_id:
+                return jsonify({
+                    "success": False,
+                    "message": "Missing car ID ❌"
+                }), 400
 
+            if rental_type not in ["Rental Only", "With Driver"]:
+                return jsonify({
+                    "success": False,
+                    "message": "Invalid rental type ❌"
+                }), 400
 
-        # 🔥 Check car exists AND is approved
-        cursor.execute("""
-            SELECT owner_email, status
-            FROM cars
-            WHERE id=?
-        """,(car_id,))
+            # 🔥 Check car exists
+            result = conn.execute(text("""
+                SELECT owner_email, status
+                FROM cars
+                WHERE id=:car_id
+            """), {"car_id": car_id})
 
-        car = cursor.fetchone()
+            car = result.mappings().first()
 
-        if not car:
-            return jsonify({
-                "success":False,
-                "message":"Car not found ❌"
-            }),404
+            if not car:
+                return jsonify({
+                    "success": False,
+                    "message": "Car not found ❌"
+                }), 404
 
-        if car["status"] != "Approved":
-            return jsonify({
-                "success":False,
-                "message":"Car is not available for booking ❌"
-            }),400
+            if car["status"] != "Approved":
+                return jsonify({
+                    "success": False,
+                    "message": "Car not available ❌"
+                }), 400
 
+            if car["owner_email"].lower() == customer_email:
+                return jsonify({
+                    "success": False,
+                    "message": "You cannot book your own car ❌"
+                }), 400
 
-        # 🔥 Prevent owner booking own car
-        if car["owner_email"] and car["owner_email"].lower() == customer_email:
-            return jsonify({
-                "success": False,
-                "message": "You cannot book your own car ❌"
-            }),400
+            pickup = data.get("pickup_datetime")
+            drop = data.get("drop_datetime")
 
-        # 🔥 DATE CONFLICT CHECK (PRO LEVEL)
-        pickup = data.get("pickup_datetime")
-        drop = data.get("drop_datetime")
+            if not pickup or not drop:
+                return jsonify({
+                    "success": False,
+                    "message": "Pickup & Drop required ❌"
+                }), 400
 
-        if not pickup or not drop:
-            return jsonify({
-                "success":False,
-                "message":"Pickup & Drop required ❌"
-            }),400
+            # 🔥 Conflict check
+            conflict = conn.execute(text("""
+                SELECT 1 FROM bookings
+                WHERE car_id=:car_id
+                AND booking_status IN ('Confirmed','Ongoing')
+                AND pickup_datetime < :drop
+                AND drop_datetime > :pickup
+            """), {
+                "car_id": car_id,
+                "pickup": pickup,
+                "drop": drop
+            }).fetchone()
 
-        cursor.execute("""
-        SELECT 1 FROM bookings
-        WHERE car_id=?
-        AND booking_status IN ('Confirmed','Ongoing')
-        AND (
-            pickup_datetime < ?
-            AND drop_datetime > ?
-        )
-        """,(car_id, drop, pickup))
+            if conflict:
+                return jsonify({
+                    "success": False,
+                    "message": "Car already booked for selected time ❌"
+                }), 400
 
-        if cursor.fetchone():
-            return jsonify({
-                "success":False,
-                "message":"Car already booked for selected time ❌"
-            }),400
+            # 🔥 Insert booking
+            result = conn.execute(text("""
+                INSERT INTO bookings(
+                    car_id,
+                    car_name,
+                    owner_email,
+                    customer_name,
+                    customer_email,
+                    customer_mobile,
+                    nominee,
+                    rental_type,
+                    pickup_location,
+                    drop_location,
+                    pickup_datetime,
+                    drop_datetime,
+                    driver_name,
+                    driver_mobile,
+                    passenger_count,
+                    total_cost,
+                    booking_status
+                )
+                VALUES(
+                    :car_id,
+                    :car_name,
+                    :owner_email,
+                    :customer_name,
+                    :customer_email,
+                    :customer_mobile,
+                    :nominee,
+                    :rental_type,
+                    :pickup_location,
+                    :drop_location,
+                    :pickup_datetime,
+                    :drop_datetime,
+                    :driver_name,
+                    :driver_mobile,
+                    :passenger_count,
+                    :total_cost,
+                    'Confirmed'
+                )
+                RETURNING id
+            """), {
+                "car_id": car_id,
+                "car_name": data.get("car_name"),
+                "owner_email": car["owner_email"],
+                "customer_name": data.get("customer_name"),
+                "customer_email": customer_email,
+                "customer_mobile": data.get("customer_mobile"),
+                "nominee": data.get("nominee"),
+                "rental_type": rental_type,
+                "pickup_location": data.get("pickup_location"),
+                "drop_location": data.get("drop_location"),
+                "pickup_datetime": pickup,
+                "drop_datetime": drop,
+                "driver_name": data.get("driver_name"),
+                "driver_mobile": data.get("driver_mobile"),
+                "passenger_count": int(data.get("passenger_count") or 0),
+                "total_cost": int(data.get("total_cost") or 0)
+            })
 
-        cursor.execute("""
-        SELECT * FROM bookings
-        WHERE car_id=?
-        AND booking_status='Confirmed'
-        AND (
-            pickup_datetime <= ?
-            AND drop_datetime >= ?
-        )
-        """,(car_id, drop, pickup))
+            booking_id = result.fetchone()[0]
 
-        conflict = cursor.fetchone()
-
-        if conflict:
-            return jsonify({
-                "success":False,
-                "message":"Car already booked for selected dates ❌"
-            }),400
-        
-        # ✅ BONUS — USER OVERLAP CHECK (VERY IMPRESSIVE FEATURE)
-        cursor.execute("""
-        SELECT 1 FROM bookings
-        WHERE customer_email=?
-        AND booking_status IN ('Confirmed','Ongoing')
-        AND (
-            pickup_datetime < ?
-            AND drop_datetime > ?
-        )
-        """,(customer_email, drop, pickup))
-
-        if cursor.fetchone():
-            return jsonify({
-                "success":False,
-                "message":"You already have a booking during this time ❌"
-            }),400
-        
-        # SAFE TYPE CONVERSION
-        try:
-            passenger_count = int(data.get("passenger_count")) if data.get("passenger_count") else None
-        except:
-            passenger_count = None
-
-        try:
-            total_cost = int(data.get("total_cost")) if data.get("total_cost") else 0
-        except:
-            total_cost = 0
-
-        # ✅ INSERT BOOKING (UPGRADED)
-        cursor.execute("""
-        INSERT INTO bookings(
-            car_id,
-            car_name,
-            owner_email,
-
-            customer_name,
-            customer_email,
-            customer_mobile,
-            nominee,
-
-            rental_type,
-
-            pickup_location,
-            drop_location,
-
-            pickup_datetime,
-            drop_datetime,
-
-            driver_name,
-            driver_mobile,
-            passenger_count,
-
-            total_cost,
-            booking_status
-        )
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,(
-
-            car_id,
-            data.get("car_name"),
-            car["owner_email"],
-
-            data.get("customer_name"),
-            customer_email,
-            data.get("customer_mobile"),
-            data.get("nominee"),
-
-            rental_type,
-
-            data.get("pickup_location"),
-            data.get("drop_location"),
-
-            pickup,
-            drop,
-
-            data.get("driver_name"),
-            data.get("driver_mobile"),
-            passenger_count,
-            total_cost, 
-            "Confirmed"
-        ))
-
-        conn.commit()
-
+        # 🔥 Send email after commit
         try:
             send_booking_email(data)
-        except Exception as mail_error:
-            print("Email failed but booking saved:", mail_error)
-
-        booking_id = cursor.lastrowid
-
-        print("BOOKING SUCCESS ✅ ID:", booking_id)
-
-        
+        except:
+            pass
 
         return jsonify({
             "success": True,
@@ -1033,21 +814,12 @@ def book_car():
             "booking_id": booking_id
         })
 
-        import traceback
     except Exception as e:
-        print("\n🔥🔥🔥 REAL BACKEND ERROR 🔥🔥🔥")
-        traceback.print_exc()
-        print("🔥🔥🔥 END ERROR 🔥🔥🔥\n")
-
+        print("BOOKING ERROR:", e)
         return jsonify({
-        "success": False,
-        "message": "Booking failed ❌"
-    }),500
-
-
-    finally:
-        conn.close()
-
+            "success": False,
+            "message": "Booking failed ❌"
+        }), 500
 
 
 @app.route("/admin/block-car", methods=["POST"])
@@ -1056,36 +828,50 @@ def block_car():
     data = request.get_json()
     car_id = data.get("car_id")
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # 🚨 Check active booking
-    cursor.execute("""
-        SELECT * FROM bookings
-        WHERE car_id=?
-        AND booking_status='Confirmed'
-    """,(car_id,))
-
-    if cursor.fetchone():
+    if not car_id:
         return jsonify({
-            "success":False,
-            "message":"Car has active booking ❌ Cannot block"
-        }),400
+            "success": False,
+            "message": "Car ID required ❌"
+        }), 400
 
+    try:
+        with engine.begin() as conn:
 
-    cursor.execute("""
-        UPDATE cars
-        SET status='Blocked'
-        WHERE id=?
-    """,(car_id,))
+            # 🔥 Check if car has active booking
+            result = conn.execute(text("""
+                SELECT 1 FROM bookings
+                WHERE car_id=:car_id
+                AND booking_status='Confirmed'
+            """), {
+                "car_id": car_id
+            })
 
-    conn.commit()
-    conn.close()
+            if result.fetchone():
+                return jsonify({
+                    "success": False,
+                    "message": "Car has active booking ❌ Cannot block"
+                }), 400
 
-    return jsonify({
-        "success":True,
-        "message":"Car blocked successfully 🚫"
-    })
+            # 🔥 Block car
+            conn.execute(text("""
+                UPDATE cars
+                SET status='Blocked'
+                WHERE id=:car_id
+            """), {
+                "car_id": car_id
+            })
+
+        return jsonify({
+            "success": True,
+            "message": "Car blocked successfully 🚫"
+        })
+
+    except Exception as e:
+        print("BLOCK ERROR:", e)
+        return jsonify({
+            "success": False,
+            "message": "Database error ❌"
+        }), 500
 
 @app.route("/sell-car", methods=["POST"])
 def sell_car():
@@ -1093,204 +879,219 @@ def sell_car():
     data = request.get_json(silent=True)
 
     if not data:
-        return jsonify({"success":False}),400
+        return jsonify({"success": False}), 400
 
-    owner_email = data.get("owner_email").lower().strip()
-    reg_number = data.get("reg_number").upper().strip()
+    owner_email = data.get("owner_email", "").lower().strip()
+    reg_number = data.get("reg_number", "").upper().strip()
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # 🔥 prevent duplicate registration
-    cursor.execute("""
-        SELECT id FROM selling
-        WHERE reg_number=?
-    """,(reg_number,))
-
-    if cursor.fetchone():
+    if not owner_email or not reg_number:
         return jsonify({
-            "success":False,
-            "message":"Car already listed for sale ❌"
-        }),400
+            "success": False,
+            "message": "Missing required fields ❌"
+        }), 400
 
+    try:
+        with engine.begin() as conn:
 
-    cursor.execute("""
-    INSERT INTO selling(
-        owner_email,
-        company,
-        model,
-        reg_number,
-        year,
-        fuel,
-        transmission,
-        km,
-        owner_type,
-        location,
-        selling_price,
-        description,
-        images
-    )
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
-    """,(
-        owner_email,
-        data.get("company"),
-        data.get("model"),
-        reg_number,
-        data.get("year"),
-        data.get("fuel"),
-        data.get("transmission"),
-        data.get("km"),
-        data.get("owner_type"),
-        data.get("location"),
-        data.get("selling_price"),
-        data.get("description"),
-        json.dumps(data.get("images",[]))
-    ))
+            # 🔥 Prevent duplicate registration
+            result = conn.execute(text("""
+                SELECT id FROM selling
+                WHERE reg_number=:reg
+            """), {
+                "reg": reg_number
+            })
 
-    conn.commit()
-    conn.close()
+            if result.fetchone():
+                return jsonify({
+                    "success": False,
+                    "message": "Car already listed for sale ❌"
+                }), 400
 
-    return jsonify({
-        "success":True,
-        "message":"Car submitted for approval ✅"
-    })
+            # 🔥 Insert selling car
+            conn.execute(text("""
+                INSERT INTO selling(
+                    owner_email,
+                    company,
+                    model,
+                    reg_number,
+                    year,
+                    fuel,
+                    transmission,
+                    km,
+                    owner_type,
+                    location,
+                    selling_price,
+                    description,
+                    images
+                )
+                VALUES(
+                    :owner_email,
+                    :company,
+                    :model,
+                    :reg_number,
+                    :year,
+                    :fuel,
+                    :transmission,
+                    :km,
+                    :owner_type,
+                    :location,
+                    :selling_price,
+                    :description,
+                    :images
+                )
+            """), {
+                "owner_email": owner_email,
+                "company": data.get("company"),
+                "model": data.get("model"),
+                "reg_number": reg_number,
+                "year": data.get("year"),
+                "fuel": data.get("fuel"),
+                "transmission": data.get("transmission"),
+                "km": data.get("km"),
+                "owner_type": data.get("owner_type"),
+                "location": data.get("location"),
+                "selling_price": data.get("selling_price"),
+                "description": data.get("description"),
+                "images": json.dumps(data.get("images", []))
+            })
+
+        return jsonify({
+            "success": True,
+            "message": "Car submitted for approval ✅"
+        })
+
+    except Exception as e:
+        print("SELL CAR ERROR:", e)
+        return jsonify({
+            "success": False,
+            "message": "Database error ❌"
+        }), 500
 
 
 @app.route("/admin/pending-selling")
 def pending_selling():
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM selling
+            WHERE status='Pending'
+        """))
 
-    cursor.execute("""
-        SELECT * FROM selling
-        WHERE status='Pending'
-    """)
+        cars = [dict(row) for row in result.mappings().all()]
 
-    cars = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return jsonify({"success":True,"cars":cars})
+    return jsonify({
+        "success": True,
+        "cars": cars
+    })
 
 @app.route("/admin/update-selling-status", methods=["POST"])
 def update_selling_status():
 
     data = request.get_json()
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE selling
+            SET status=:status
+            WHERE id=:car_id
+        """), {
+            "status": data.get("status"),
+            "car_id": data.get("car_id")
+        })
 
-    cursor.execute("""
-        UPDATE selling
-        SET status=?
-        WHERE id=?
-    """,(data.get("status"), data.get("car_id")))
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"success":True})
+    return jsonify({"success": True})
 
 @app.route("/admin/approve-sell/<int:car_id>", methods=["POST"])
 def approve_sell(car_id):
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE selling
-        SET status='Approved'
-        WHERE id=?
-    """,(car_id,))
-
-    conn.commit()
-    conn.close()
-
-    print("SELLING CAR APPROVED:", car_id)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE selling
+            SET status='Approved'
+            WHERE id=:car_id
+        """), {
+            "car_id": car_id
+        })
 
     return jsonify({
-        "success":True,
-        "message":"Car Approved ✅"
+        "success": True,
+        "message": "Car Approved ✅"
     })
 
 @app.route("/admin/reject-sell/<int:car_id>", methods=["POST"])
 def reject_sell(car_id):
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        UPDATE selling
-        SET status='Rejected'
-        WHERE id=?
-    """,(car_id,))
-
-    conn.commit()
-    conn.close()
-
-    print("SELLING CAR REJECTED:", car_id)
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE selling
+            SET status='Rejected'
+            WHERE id=:car_id
+        """), {
+            "car_id": car_id
+        })
 
     return jsonify({
-        "success":True,
-        "message":"Car Rejected ❌"
+        "success": True,
+        "message": "Car Rejected ❌"
     })
 
 
 @app.route("/approved-selling/<email>")
 def approved_selling(email):
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM selling
+            WHERE status='Approved'
+            AND LOWER(owner_email) != LOWER(:email)
+        """), {
+            "email": email
+        })
 
-    cursor.execute("""
-        SELECT *
-        FROM selling
-        WHERE status='Approved'
-        AND LOWER(owner_email) != LOWER(?)
-    """,(email,))
+        cars = [dict(row) for row in result.mappings().all()]
 
-    cars = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return jsonify({"success":True,"cars":cars})
+    return jsonify({
+        "success": True,
+        "cars": cars
+    })
 
 @app.route("/my-selling-status/<email>")
 def my_selling_status(email):
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM selling
+            WHERE LOWER(owner_email)=LOWER(:email)
+            ORDER BY created_at DESC
+        """), {
+            "email": email
+        })
 
-    cursor.execute("""
-        SELECT *
-        FROM selling
-        WHERE LOWER(owner_email)=LOWER(?)
-        ORDER BY created_at DESC
-    """,(email,))
-
-    cars = [dict(row) for row in cursor.fetchall()]
-    conn.close()
+        cars = [dict(row) for row in result.mappings().all()]
 
     return jsonify({
-        "success":True,
-        "cars":cars
+        "success": True,
+        "cars": cars
     })
-
 # ==============================
 # GET PROFILE IMAGE
 # ==============================
 @app.route("/get-profile-image/<email>")
 def get_profile_img(email):
 
-    conn = sqlite3.connect("login.db")
-    cursor = conn.cursor()
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT profile_img
+            FROM signup
+            WHERE email=:email
+        """), {
+            "email": email.lower().strip()
+        })
 
-    cursor.execute(
-        "SELECT profile_img FROM signup WHERE email=?",
-        (email,)
-    )
-
-    row = cursor.fetchone()
-    conn.close()
+        row = result.fetchone()
 
     if row and row[0]:
         return jsonify({
@@ -1301,7 +1102,6 @@ def get_profile_img(email):
     return jsonify({
         "success": False
     })
-
 # ==============================
 # UPLOAD PROFILE IMAGE
 # ==============================
@@ -1313,17 +1113,21 @@ def upload_profile_img():
     email = data.get("email")
     image = data.get("image")
 
-    conn = sqlite3.connect("login.db")
-    cur = conn.cursor()
+    if not email or not image:
+        return jsonify({
+            "success": False,
+            "message": "Missing data ❌"
+        }), 400
 
-    cur.execute("""
-        UPDATE signup
-        SET profile_img = ?
-        WHERE email = ?
-    """, (image, email))
-
-    conn.commit()
-    conn.close()
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE signup
+            SET profile_img=:image
+            WHERE email=:email
+        """), {
+            "image": image,
+            "email": email.lower().strip()
+        })
 
     return jsonify({"success": True})
 
@@ -1334,25 +1138,23 @@ def upload_profile_img():
 def get_profile(email):
 
     try:
-        conn = sqlite3.connect("login.db")
-        conn.row_factory = sqlite3.Row   # 🔥 Important
-        cur = conn.cursor()
+        with engine.begin() as conn:
+            result = conn.execute(text("""
+                SELECT
+                    first_name,
+                    last_name,
+                    email,
+                    phone,
+                    account_id,
+                    created_at,
+                    profile_img
+                FROM signup
+                WHERE email=:email
+            """), {
+                "email": email.lower().strip()
+            })
 
-        cur.execute("""
-            SELECT
-                first_name,
-                last_name,
-                email,
-                phone,
-                account_id,
-                created_at,
-                profile_img
-            FROM signup
-            WHERE email = ?
-        """, (email.lower().strip(),))
-
-        row = cur.fetchone()
-        conn.close()
+            row = result.mappings().first()
 
         if not row:
             return jsonify({
@@ -1362,7 +1164,7 @@ def get_profile(email):
 
         return jsonify({
             "success": True,
-            "profile": dict(row)   # 🔥 Cleaner JSON
+            "profile": dict(row)
         })
 
     except Exception as e:
@@ -1370,6 +1172,95 @@ def get_profile(email):
             "success": False,
             "message": str(e)
         })
+
+@app.route("/create-buy-request", methods=["POST"])
+def create_buy_request():
+
+    data = request.json
+
+    car_id = data.get("car_id")
+    buyer_email = data.get("buyer_email")
+    offered_price = data.get("offered_price")
+
+    if not car_id or not buyer_email:
+        return jsonify({"success": False, "message": "Missing data ❌"}), 400
+
+    with engine.begin() as conn:
+
+        # Get seller email
+        result = conn.execute(text("""
+            SELECT owner_email, selling_price
+            FROM selling
+            WHERE id=:car_id AND status='Approved'
+        """), {"car_id": car_id})
+
+        car = result.mappings().first()
+
+        if not car:
+            return jsonify({"success": False, "message": "Car not available ❌"}), 404
+
+        conn.execute(text("""
+            INSERT INTO buy_requests(
+                car_id,
+                seller_email,
+                buyer_email,
+                offered_price
+            )
+            VALUES(
+                :car_id,
+                :seller_email,
+                :buyer_email,
+                :offered_price
+            )
+        """), {
+            "car_id": car_id,
+            "seller_email": car["owner_email"],
+            "buyer_email": buyer_email,
+            "offered_price": offered_price or car["selling_price"]
+        })
+
+    return jsonify({
+        "success": True,
+        "message": "Buy request sent to seller ✅"
+    })
+
+@app.route("/my-buy-requests/<email>")
+def my_buy_requests(email):
+
+    with engine.begin() as conn:
+        result = conn.execute(text("""
+            SELECT *
+            FROM buy_requests
+            WHERE seller_email = :email
+            AND status != 'Rejected'
+            ORDER BY created_at DESC
+        """), {"email": email})
+
+        requests = [dict(row) for row in result.mappings().all()]
+
+    return jsonify({
+        "success": True,
+        "requests": requests
+    })
+
+@app.route("/update-buy-request", methods=["POST"])
+def update_buy_request():
+
+    data = request.json
+    request_id = data.get("request_id")
+    status = data.get("status")
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE buy_requests
+            SET status=:status
+            WHERE id=:request_id
+        """), {
+            "status": status,
+            "request_id": request_id
+        })
+
+    return jsonify({"success": True})
 
 # -----------------------------
 # RUN SERVER

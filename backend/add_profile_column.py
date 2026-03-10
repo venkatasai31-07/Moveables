@@ -1,102 +1,75 @@
-import sqlite3
+import os
+from sqlalchemy import create_engine, text
 from datetime import datetime
 import random
 
-conn = sqlite3.connect("login.db")
-cur = conn.cursor()
+# 🔐 Use environment variable (IMPORTANT)
+DATABASE_URL = "postgresql://postgres.pxnangovncbvfbjywnbv:omSriganesha06@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres"
 
-# -----------------------------
-# 1️⃣ Create new table safely
-# -----------------------------
-cur.execute("""
-CREATE TABLE IF NOT EXISTS signup_new (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    first_name TEXT,
-    last_name TEXT,
-    email TEXT UNIQUE,
-    profile_img TEXT,
-    created_at TEXT
-)
-""")
+engine = create_engine(DATABASE_URL)
 
-print("✅ New table ready")
+print("🚀 Starting PostgreSQL migration...")
 
-# -----------------------------
-# 2️⃣ Copy old data
-# -----------------------------
-cur.execute("""
-INSERT INTO signup_new
-(first_name,last_name,email,profile_img)
-SELECT first_name,last_name,email,profile_img
-FROM signup
-""")
+with engine.begin() as conn:
 
-print("📦 Data copied")
+    # -----------------------------
+    # 1️⃣ Add missing columns safely
+    # -----------------------------
+    conn.execute(text("""
+        ALTER TABLE signup
+        ADD COLUMN IF NOT EXISTS phone TEXT
+    """))
 
-# -----------------------------
-# 3️⃣ Drop old table
-# -----------------------------
-cur.execute("DROP TABLE signup")
-print("🗑 Old table removed")
+    conn.execute(text("""
+        ALTER TABLE signup
+        ADD COLUMN IF NOT EXISTS account_id TEXT
+    """))
 
-# -----------------------------
-# 4️⃣ Rename new table
-# -----------------------------
-cur.execute("""
-ALTER TABLE signup_new
-RENAME TO signup
-""")
+    conn.execute(text("""
+        ALTER TABLE signup
+        ADD COLUMN IF NOT EXISTS profile_img TEXT
+    """))
 
-print("📦 Table renamed")
+    conn.execute(text("""
+        ALTER TABLE signup
+        ADD COLUMN IF NOT EXISTS created_at TEXT
+    """))
 
-# -----------------------------
-# 5️⃣ Add new columns safely
-# -----------------------------
-try:
-    cur.execute("ALTER TABLE signup ADD COLUMN phone TEXT")
-except:
-    print("⚠️ phone column already exists")
+    print("✅ Columns verified/added")
 
-try:
-    cur.execute("ALTER TABLE signup ADD COLUMN account_id TEXT")
-except:
-    print("⚠️ account_id column already exists")
+    # -----------------------------
+    # 2️⃣ Fill missing created_at
+    # -----------------------------
+    today = datetime.now().strftime("%d %b %Y")
 
-# -----------------------------
-# 6️⃣ Add created date
-# -----------------------------
-today = datetime.now().strftime("%d %b %Y")
+    conn.execute(text("""
+        UPDATE signup
+        SET created_at = :today
+        WHERE created_at IS NULL
+    """), {"today": today})
 
-cur.execute("""
-UPDATE signup
-SET created_at = ?
-WHERE created_at IS NULL
-""", (today,))
+    print("📅 created_at updated")
 
-print("📅 Dates added")
+    # -----------------------------
+    # 3️⃣ Generate account IDs safely
+    # -----------------------------
+    users = conn.execute(text("""
+        SELECT id FROM signup
+        WHERE account_id IS NULL
+    """)).fetchall()
 
-# -----------------------------
-# 7️⃣ Generate Account IDs
-# -----------------------------
-users = cur.execute(
-    "SELECT id FROM signup"
-).fetchall()
+    for u in users:
+        acc_id = "CRP" + str(random.randint(10000, 99999))
 
-for u in users:
-    acc_id = "CRP" + str(random.randint(10000,99999))
+        conn.execute(text("""
+            UPDATE signup
+            SET account_id = :acc_id
+            WHERE id = :id
+        """), {
+            "acc_id": acc_id,
+            "id": u[0]
+        })
 
-    cur.execute("""
-    UPDATE signup
-    SET account_id = ?
-    WHERE id = ?
-    """, (acc_id, u[0]))
+    print("🆔 Account IDs generated")
 
-print("🆔 Account IDs generated")
-
-cur.execute("DROP TABLE IF EXISTS signup_new")
-
-# -----------------------------
-conn.commit()
-conn.close()
-
-print("🚀 Migration completed successfully")
+print("🎉 Migration completed successfully!")

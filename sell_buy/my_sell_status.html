@@ -38,6 +38,23 @@ body{
   margin-bottom:18px;
 }
 
+.view-buy-btn{
+  background: linear-gradient(135deg,#7f5cff,#9b7cff);
+  border:none;
+  color:white;
+  font-weight:600;
+  padding:10px 16px;
+  border-radius:12px;
+  cursor:pointer;
+  transition:0.2s;
+  box-shadow:0 8px 20px rgba(155,124,255,0.3);
+}
+
+.view-buy-btn:hover{
+  transform:translateY(-2px);
+  opacity:0.95;
+}
+
 h2{color:#9b7cff;font-size:22px;}
 .sub{color:#aaa;font-size:13px;margin-top:5px;}
 
@@ -106,6 +123,10 @@ h2{color:#9b7cff;font-size:22px;}
 <div class="topbar">
   <div>
     <h2>My Sell Requests</h2>
+    <button class="btn view-buy-btn"
+  onclick="window.location.href='my_buy_request.html'">
+  📩 View Buy Requests
+</button>
     <div class="sub">Check approval status for cars you submitted to sell ✅</div>
   </div>
   <button class="btn" onclick="window.location.href='../home/home.html'">← Back Home</button>

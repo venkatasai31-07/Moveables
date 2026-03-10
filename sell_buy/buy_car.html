@@ -394,8 +394,39 @@ function displayCars(list){
 
 
 // 🔥 BUY REQUEST (Next Feature)
-function sendBuyRequest(carId){
-  alert("✅ Buy request feature coming next!");
+// 🔥 REAL BUY REQUEST FUNCTION
+async function sendBuyRequest(carId){
+
+  try{
+
+    const response = await fetch(
+      `${API_BASE}/create-buy-request`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          car_id: carId,
+          buyer_email: user.email
+        })
+      }
+    );
+
+    const data = await response.json();
+
+    if(data.success){
+      alert("✅ Buy request sent to seller successfully!");
+    }else{
+      alert(data.message || "Something went wrong ❌");
+    }
+
+  }catch(err){
+
+    console.error("BUY REQUEST ERROR:", err);
+    alert("Server error ❌");
+
+  }
 }
 
 
