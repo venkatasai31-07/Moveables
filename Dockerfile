@@ -32,11 +32,10 @@ sed -i \"s/listen 8080;/listen \${PORT:-8080};/g\" /etc/nginx/conf.d/default.con
 \n\
 nginx\n\
 \n\
-# Use 1 worker each to keep memory usage under 512MB RAM\n\
+# Use 1 worker to keep memory usage under 512MB RAM\n\
 # Use 300s timeout to allow the large 368MB AI model to load without being killed\n\
-# Backend on 5000, ML API on 5002\n\
-gunicorn -w 1 --timeout 300 --chdir /app/backend -b 127.0.0.1:5000 app:app &\n\
-gunicorn -w 1 --timeout 300 --chdir /app/sell_buy -b 127.0.0.1:5002 ml_api:app\n" > /app/start.sh
+# Backend on 5000 (now handles both main API and ML API)\n\
+gunicorn -w 1 --timeout 300 --chdir /app/backend -b 127.0.0.1:5000 app:app\n" > /app/start.sh
 
 RUN chmod +x /app/start.sh
 

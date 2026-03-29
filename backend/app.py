@@ -20,6 +20,8 @@ from email.message import EmailMessage
 import razorpay
 import json
 import os
+import joblib
+import numpy as np
 from dotenv import load_dotenv
 
 import google.generativeai as genai
@@ -40,6 +42,32 @@ app = Flask(__name__)
 CORS(app)
 
 bcrypt = Bcrypt(app)
+
+
+# ============================================
+# 📦 LOAD ML MODEL + ENCODERS + METADATA
+# ============================================
+ML_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ml_model = None
+ml_encoders = None
+car_metadata = {"companies": [], "models": {}}
+
+try:
+    model_path = os.path.join(ML_BASE_DIR, "ui_price_model.pkl")
+    encoder_path = os.path.join(ML_BASE_DIR, "ui_encoders.pkl")
+    meta_path = os.path.join(ML_BASE_DIR, "car_metadata.json")
+
+    if os.path.exists(model_path):
+        ml_model = joblib.load(model_path)
+    if os.path.exists(encoder_path):
+        ml_encoders = joblib.load(encoder_path)
+    if os.path.exists(meta_path):
+        with open(meta_path, "r") as f:
+            car_metadata = json.load(f)
+    print("✅ ML Model components and Metadata loaded successfully!")
+except Exception as e:
+    print(f"⚠️ ML Model loading warning (Expected if files not moved yet): {e}")
+
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -2778,6 +2806,54 @@ BOUNDARIES:
 # ──────────────────────────────────────────────────────────────────────────────
 
 register_roadmind_routes(app, engine)
+
+# ============================================
+# 🔮 ML PRICE PREDICTION & SUGGESTIONS
+# ============================================
+
+@app.route("/predict", methods=["POST"])
+def predict_car_price():
+    if not ml_model or not ml_encoders:
+        return jsonify({"success": False, "error": "ML Model not loaded"}), 503
+
+    try:
+        data = request.json
+        if not data:
+            return jsonify({"success": False, "error": "No data received"}), 400
+
+        # Encode safely
+        def encode_safe(column, value):
+            le = ml_encoders[column]
+            if value in le.classes_:
+                return le.transform([value])[0]
+            else:
+                return 0
+
+        features = np.array([[
+            encode_safe("company", data["company"]),
+            encode_safe("model", data["model"]),
+            int(data["year"]),
+            int(data["km"]),
+            encode_safe("fuel", data["fuel"]),
+            encode_safe("transmission", data["transmission"]),
+            encode_safe("ownerType", data["ownerType"])
+        ]])
+
+        price = ml_model.predict(features)[0]
+        return jsonify({"success": True, "price": int(price)})
+
+    except Exception as e:
+        print("Prediction Error:", e)
+        return jsonify({"success": False, "error": str(e)})
+
+@app.route("/companies", methods=["GET"])
+def get_ml_companies():
+    return jsonify(car_metadata.get("companies", []))
+
+@app.route("/models/<company>", methods=["GET"])
+def get_ml_models(company):
+    return jsonify(car_metadata.get("models", {}).get(company, []))
+
 
 if __name__ == "__main__":
     app.run(host="127.0.0.1", port=3000, debug=True)
