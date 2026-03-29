@@ -1,15 +1,18 @@
-# Use Python 3.9-slim as base
-FROM python:3.9-slim
+# Use Python 3.10-slim for better compatibility with ChromaDB/SQLite
+FROM python:3.10-slim
 
-# Install Nginx and build dependencies for chromadb (hnswlib)
+# Install Nginx and full build suite for native extensions (ChromaDB/hnswlib)
 RUN apt-get update && apt-get install -y \
     nginx \
     build-essential \
+    gcc \
     g++ \
+    cmake \
+    make \
     python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Optimize building hnswlib for multi-architecture compatibility
+# Ensure hnswlib builds without architecture-specific issues
 ENV HNSWLIB_NO_NATIVE=1
 
 # Set working directory
