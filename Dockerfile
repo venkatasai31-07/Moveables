@@ -1,9 +1,15 @@
-# Use full Python 3.10 (not slim) to ensure all build tools are pre-configured
-FROM python:3.10
+# Use your stable Python 3.9-slim base
+FROM python:3.9-slim
 
-# Install Nginx and basic tools only (Full image already includes GCC/G++/Make)
+# Install Nginx and build tools
 RUN apt-get update && apt-get install -y \
     nginx \
+    build-essential \
+    python3-dev \
+    gcc \
+    g++ \
+    cmake \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
 # Ensure hnswlib builds without architecture-specific issues
@@ -14,7 +20,8 @@ WORKDIR /app
 
 # Copy requirement first (to leverage Docker cache)
 COPY backend/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Use high timeout for unstable internet connections
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 
 # Copy the entire project 
 COPY . .
@@ -35,7 +42,7 @@ nginx\n\
 \n\
 # Use 1 worker to keep memory usage under 512MB RAM\n\
 # Use 300s timeout to allow the large 368MB AI model to load without being killed\n\
-# Backend on 5000 (now handles both main API and ML API)\n\
+# Consolidated Backend handles both main API and ML API\n\
 gunicorn -w 1 --timeout 300 --chdir /app/backend -b 127.0.0.1:5000 app:app\n" > /app/start.sh
 
 RUN chmod +x /app/start.sh

@@ -13,6 +13,5 @@ venv/
 .github/
 Dockerfile
 docker-compose.yml
-nginx.conf
 README.md
 RESEARCH_PAPER.md
