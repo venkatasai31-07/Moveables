@@ -30,3 +30,6 @@ Thumbs.db
 # Dockerfile
 # .dockerignore
 # In this case, the user explicitly asked to push them, so they are NOT ignored.
+docker-compose.yml
+
+docker-compose.yml
