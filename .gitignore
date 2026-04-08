@@ -1,6 +1,5 @@
 # Secrets
 backend/.env
-# This ignores all .env files in any subdirectory
 **/.env
 .env
 *.env
@@ -26,10 +25,13 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Docker (unless you want to push them)
+# Docker files (including because user wants full deployment support)
 # Dockerfile
 # .dockerignore
-# In this case, the user explicitly asked to push them, so they are NOT ignored.
 docker-compose.yml
 
-docker-compose.yml
+# Large Binary Files
+sell_buy/ui_price_model.pkl
+sell_buy/ui_encoders.pkl
+ai_assistant/nlp/car_booking_model.pkl
+ai_assistant/nlp/parcel_model.pkl
