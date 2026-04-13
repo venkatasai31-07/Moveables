@@ -4,6 +4,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/index.py"
+    },
+    {
+      "source": "/ml-api/(.*)",
+      "destination": "/api/index.py"
     }
   ]
 }
