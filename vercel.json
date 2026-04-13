@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://YOUR-RAILWAY-APP-URL.up.railway.app/$1"
+      "destination": "https://web-production-262fb.up.railway.app/"
     },
     {
       "source": "/ml-api/(.*)",
-      "destination": "https://YOUR-RAILWAY-APP-URL.up.railway.app/$1"
+      "destination": "https://web-production-262fb.up.railway.app/"
     }
   ]
 }

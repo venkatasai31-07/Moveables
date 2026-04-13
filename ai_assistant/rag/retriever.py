@@ -26,17 +26,20 @@ COLLECTION_NAME   = "roadmind_knowledge"
 # Must configure API key before calling — done in app.py via genai.configure(api_key=...)
 
 # ── Embedding function (must match build_index.py) ─────────────────────────
-class GeminiEmbeddingFunction(embedding_functions.EmbeddingFunction):
-    def __call__(self, texts):
-        embeddings = []
-        for text in texts:
-            result = genai.embed_content(
-                model="models/gemini-embedding-001",
-                content=text,
-                task_type="retrieval_query"
-            )
-            embeddings.append(result["embedding"])
-        return embeddings
+if CHROMA_AVAILABLE:
+    class GeminiEmbeddingFunction(embedding_functions.EmbeddingFunction):
+        def __call__(self, texts):
+            embeddings = []
+            for text in texts:
+                result = genai.embed_content(
+                    model="models/gemini-embedding-001",
+                    content=text,
+                    task_type="retrieval_query"
+                )
+                embeddings.append(result["embedding"])
+            return embeddings
+else:
+    GeminiEmbeddingFunction = None
 
 # ── Initialize client once at module load ──────────────────────────────────
 _client     = None
