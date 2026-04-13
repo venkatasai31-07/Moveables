@@ -11,9 +11,14 @@
 """
 
 import os
-import chromadb
-import google.generativeai as genai
-from chromadb.utils import embedding_functions
+try:
+    import chromadb
+    import google.generativeai as genai
+    from chromadb.utils import embedding_functions
+    CHROMA_AVAILABLE = True
+except ImportError:
+    CHROMA_AVAILABLE = False
+    print("⚠️ ChromaDB not found. RAG will be disabled.")
 
 CHROMA_STORE_PATH = os.path.join(os.path.dirname(__file__), "chroma_store")
 COLLECTION_NAME   = "roadmind_knowledge"
@@ -55,6 +60,9 @@ def search_knowledge(query: str, top_k: int = 4) -> str:
     Returns formatted string of top matching chunks.
     Returns empty string if nothing relevant found or if index is missing.
     """
+    if not CHROMA_AVAILABLE:
+        return ""
+        
     try:
         collection = get_collection()
         results    = collection.query(

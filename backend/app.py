@@ -20,8 +20,13 @@ from email.message import EmailMessage
 import razorpay
 import json
 import os
-import joblib
-import numpy as np
+try:
+    import joblib
+    import numpy as np
+    ML_AVAILABLE = True
+except ImportError:
+    ML_AVAILABLE = False
+    print("⚠️ ML libraries not found. ML features will be disabled.")
 from dotenv import load_dotenv
 
 import google.generativeai as genai
@@ -82,6 +87,9 @@ except Exception as e:
 def load_ml_model_lazy():
     """Lazily loads the model and encoders only when needed to save RAM during startup."""
     global ml_model, ml_encoders
+    if not ML_AVAILABLE:
+        return None, None
+        
     if ml_model is None:
         print("📥 Lazily loading ML Model and Encoders (RAM spike expected)...")
         try:
