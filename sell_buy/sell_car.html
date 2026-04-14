@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Sell Your Car - CarRentalPro</title>
 
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
-
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 
   <style>
@@ -258,8 +255,6 @@
 
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
   </style>
-
-  </style>
     <link rel="stylesheet" href="../ai_assistant/roadmind.css">
     <script src="../ai_assistant/roadmind.js" defer></script>
 </head>
@@ -448,14 +443,16 @@ locationInput.value||"-";
 [company,model,sellingPrice,locationInput]
 .forEach(el=>el.addEventListener("input",updateSummary));
 
-// ================= MAP =================
+// ================= MAP (debounced) =================
+let _mapDebounceTimer = null;
 locationInput.addEventListener("input",()=>{
-
-document.getElementById("mapFrame").src=
-locationInput.value.length>2
-?`https://www.google.com/maps?q=${encodeURIComponent(locationInput.value)}&output=embed`
-:"https://www.google.com/maps?q=India&output=embed";
-
+  clearTimeout(_mapDebounceTimer);
+  _mapDebounceTimer = setTimeout(() => {
+    document.getElementById("mapFrame").src =
+      locationInput.value.length > 2
+        ? `https://www.google.com/maps?q=${encodeURIComponent(locationInput.value)}&output=embed`
+        : "https://www.google.com/maps?q=India&output=embed";
+  }, 600);
 });
 
 // ================= ML PRICE =================
@@ -494,7 +491,8 @@ updateSummary();
 }
 
 }catch(err){
-console.log("ML error",err);
+  console.log("ML error",err);
+  document.getElementById("estimatedPrice").innerText = "Unable to estimate (ML unavailable)";
 }
 
 }

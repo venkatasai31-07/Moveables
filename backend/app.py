@@ -51,7 +51,7 @@ try:
     print("✅ NLP Layer 0 loaded successfully!")
 except Exception as _nlp_err:
     NLP_LAYER_AVAILABLE = False
-    print(f"⚠️ NLP Layer 0 not loaded (will use Gemini only): {_nlp_err}")
+    print(f"WARNING: NLP Layer 0 not loaded (will use Gemini only): {_nlp_err}")
 
 # ── In-memory session store for ML classifier flow states ─────────────────
 # Key: session_id  →  Value: {'flow_type': str, 'step': str, 'collected': dict}
@@ -2639,7 +2639,7 @@ def classify_question(question: str, role: str) -> str:
     platform_policy | car_problem | general | unrelated
     """
     try:
-        model = genai.GenerativeModel("gemini-flash-latest")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         prompt = f"""
 Classify this question into EXACTLY one of these categories.
 Reply with ONLY the category name, nothing else.
@@ -2685,7 +2685,7 @@ def extract_car_filters(question: str) -> dict:
     Returns dict with keys: fuel, listing_type, max_price, location
     """
     try:
-        model = genai.GenerativeModel("gemini-flash-latest")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         prompt = f"""
 Extract car search filters from this question.
 Reply ONLY with a JSON object. Use null for fields not mentioned.
@@ -2966,7 +2966,7 @@ BOUNDARIES:
         # ── Build Gemini conversation ─────────────────────────────────
         try:
             model = genai.GenerativeModel(
-                model_name="gemini-flash-latest",
+                model_name="gemini-2.0-flash",
                 system_instruction=system_prompt
             )
 

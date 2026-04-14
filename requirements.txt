@@ -11,3 +11,5 @@ scikit-learn
 numpy
 joblib
 chromadb
+pysqlite3-binary
+pandas
